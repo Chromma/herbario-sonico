@@ -104,6 +104,34 @@ files = [
 altgraph = ">=0.17"
 
 [[package]]
+name = "mido"
+version = "1.3.3"
+description = "MIDI Objects for Python"
+optional = false
+python-versions = "~=3.7"
+groups = ["main"]
+files = [
+    {file = "mido-1.3.3-py3-none-any.whl", hash = "sha256:01033c9b10b049e4436fca2762194ca839b09a4334091dd3c34e7f4ae674fd8a"},
+    {file = "mido-1.3.3.tar.gz", hash = "sha256:1aecb30b7f282404f17e43768cbf74a6a31bf22b3b783bdd117a1ce9d22cb74c"},
+]
+
+[package.dependencies]
+packaging = "*"
+
+[package.extras]
+build-docs = ["sphinx (>=4.3.2,<4.4.0)", "sphinx-rtd-theme (>=1.2.2,<1.3.0)"]
+check-manifest = ["check-manifest (>=0.49)"]
+dev = ["mido[build-docs]", "mido[check-manifest]", "mido[lint-code]", "mido[lint-reuse]", "mido[release]", "mido[test-code]"]
+lint-code = ["ruff (>=0.1.6,<0.2.0)"]
+lint-reuse = ["reuse (>=1.1.2,<1.2.0)"]
+ports-all = ["mido[ports-pygame]", "mido[ports-rtmidi-python]", "mido[ports-rtmidi]"]
+ports-pygame = ["PyGame (>=2.5,<3.0)"]
+ports-rtmidi = ["python-rtmidi (>=1.5.4,<1.6.0)"]
+ports-rtmidi-python = ["rtmidi-python (>=0.2.2,<0.3.0)"]
+release = ["twine (>=4.0.2,<4.1.0)"]
+test-code = ["pytest (>=7.4.0,<7.5.0)"]
+
+[[package]]
 name = "numba"
 version = "0.61.2"
 description = "compiling Python code using LLVM"
@@ -518,4 +546,4 @@ telegram = ["requests"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.13, <3.14"
-content-hash = "d0ea01d565671ede57ccaec8eb1a09e01efa284db3027c153e4fe0a684360876"
+content-hash = "921c078f3a835a4b95eb642da4bd6c6daf84d363fc9e26b86af21c97aa545461"

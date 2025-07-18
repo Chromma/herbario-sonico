@@ -1,4 +1,4 @@
-# gui.py (Versión 5 - Corregido el error de codificación Unicode)
+# gui.py (Versión 6 - CPesta;as WAV y MIDI)
 import customtkinter as ctk
 from tkinter import filedialog
 import subprocess
@@ -12,55 +12,89 @@ class App(ctk.CTk):
 
         # --- Configuración de la Ventana Principal ---
         self.title("Herbario Sónico")
-        self.geometry("500x600")
+        self.geometry("500x650")
         ctk.set_appearance_mode("dark")
-        self.grid_columnconfigure(1, weight=1)
+        self.grid_columnconfigure(0, weight=1)
 
-        # --- Widgets de la Interfaz ---
-        self.input_folder_label = ctk.CTkLabel(self, text="Carpeta de Imágenes:")
-        self.input_folder_label.grid(row=0, column=0, padx=20, pady=(20, 5), sticky="w")
-        self.input_folder_entry = ctk.CTkEntry(self, placeholder_text="Selecciona una carpeta...")
-        self.input_folder_entry.grid(row=0, column=1, padx=20, pady=(20, 5), sticky="ew")
-        self.input_folder_button = ctk.CTkButton(self, text="Buscar...", width=100, command=self.select_input_folder)
-        self.input_folder_button.grid(row=0, column=2, padx=20, pady=(20, 5))
-
-        self.output_file_label = ctk.CTkLabel(self, text="Archivo de Salida:")
-        self.output_file_label.grid(row=1, column=0, padx=20, pady=5, sticky="w")
-        self.output_file_entry = ctk.CTkEntry(self, placeholder_text="Selecciona dónde guardar...")
-        self.output_file_entry.grid(row=1, column=1, padx=20, pady=5, sticky="ew")
-        self.output_file_button = ctk.CTkButton(self, text="Guardar como...", width=100, command=self.select_output_file)
-        self.output_file_button.grid(row=1, column=2, padx=20, pady=5)
+        # --- Frame para selección de archivos ---
+        self.file_frame = ctk.CTkFrame(self)
+        self.file_frame.grid(row=0, column=0, padx=20, pady=(20, 10), sticky="ew")
+        self.file_frame.grid_columnconfigure(1, weight=1)
         
-        self.params_frame = ctk.CTkFrame(self)
-        self.params_frame.grid(row=2, column=0, columnspan=3, padx=20, pady=20, sticky="ew")
-        self.params_frame.grid_columnconfigure(1, weight=1)
+        self.input_folder_label = ctk.CTkLabel(self.file_frame, text="Carpeta de Imágenes:")
+        self.input_folder_label.grid(row=0, column=0, padx=10, pady=10, sticky="w")
+        self.input_folder_entry = ctk.CTkEntry(self.file_frame, placeholder_text="Selecciona una carpeta...")
+        self.input_folder_entry.grid(row=0, column=1, padx=10, pady=10, sticky="ew")
+        self.input_folder_button = ctk.CTkButton(self.file_frame, text="Buscar...", width=100, command=self.select_input_folder)
+        self.input_folder_button.grid(row=0, column=2, padx=10, pady=10)
 
-        self.duration_label = ctk.CTkLabel(self.params_frame, text="Duración por Imagen (s):")
+        self.output_label = ctk.CTkLabel(self.file_frame, text="Archivo/Carpeta Salida:")
+        self.output_label.grid(row=1, column=0, padx=10, pady=10, sticky="w")
+        self.output_entry = ctk.CTkEntry(self.file_frame, placeholder_text="Selecciona una ruta de salida...")
+        self.output_entry.grid(row=1, column=1, padx=10, pady=10, sticky="ew")
+        self.output_button = ctk.CTkButton(self.file_frame, text="Guardar en...", width=100, command=self.select_output)
+        self.output_button.grid(row=1, column=2, padx=10, pady=10)
+
+        # --- Pestañas para los Modos de Salida ---
+        self.tab_view = ctk.CTkTabview(self)
+        self.tab_view.grid(row=1, column=0, padx=20, pady=10, sticky="ew")
+        self.tab_view.add("Audio (WAV)")
+        self.tab_view.add("Partitura (MIDI)")
+
+        # --- Controles de la Pestaña WAV ---
+        self.wav_tab = self.tab_view.tab("Audio (WAV)")
+        self.wav_tab.grid_columnconfigure(1, weight=1)
+        
+        self.duration_label = ctk.CTkLabel(self.wav_tab, text="Duración por Imagen (s):")
         self.duration_label.grid(row=0, column=0, padx=10, pady=10, sticky="w")
-        self.duration_entry = ctk.CTkEntry(self.params_frame)
+        self.duration_entry = ctk.CTkEntry(self.wav_tab, placeholder_text="Ej: 10.0")
         self.duration_entry.insert(0, "10.0")
         self.duration_entry.grid(row=0, column=1, padx=10, pady=10, sticky="ew")
-        
-        self.scale_label = ctk.CTkLabel(self.params_frame, text="Escala Musical:")
+
+        self.scale_label = ctk.CTkLabel(self.wav_tab, text="Escala Musical:")
         self.scale_label.grid(row=1, column=0, padx=10, pady=10, sticky="w")
-        self.scale_menu = ctk.CTkOptionMenu(self.params_frame, values=["pentatonic", "major", "minor", "raw"])
+        self.scale_menu = ctk.CTkOptionMenu(self.wav_tab, values=["pentatonic", "major", "minor", "raw"])
         self.scale_menu.grid(row=1, column=1, padx=10, pady=10, sticky="ew")
 
-        self.mode_label = ctk.CTkLabel(self.params_frame, text="Modo de Síntesis:")
+        self.mode_label = ctk.CTkLabel(self.wav_tab, text="Modo de Síntesis:")
         self.mode_label.grid(row=2, column=0, padx=10, pady=10, sticky="w")
-        self.mode_menu = ctk.CTkOptionMenu(self.params_frame, values=["rgb_instrument", "brightness"])
+        self.mode_menu = ctk.CTkOptionMenu(self.wav_tab, values=["rgb_instrument", "brightness"])
         self.mode_menu.grid(row=2, column=1, padx=10, pady=10, sticky="ew")
 
-        self.waveform_label = ctk.CTkLabel(self.params_frame, text="Forma de Onda:")
+        self.waveform_label = ctk.CTkLabel(self.wav_tab, text="Forma de Onda:")
         self.waveform_label.grid(row=3, column=0, padx=10, pady=10, sticky="w")
-        self.waveform_menu = ctk.CTkOptionMenu(self.params_frame, values=["sine", "sawtooth", "square"])
+        self.waveform_menu = ctk.CTkOptionMenu(self.wav_tab, values=["sine", "sawtooth", "square"])
         self.waveform_menu.grid(row=3, column=1, padx=10, pady=10, sticky="ew")
-        
-        self.generate_button = ctk.CTkButton(self, text="Generar Composición", height=40, command=self.start_generation_thread)
-        self.generate_button.grid(row=3, column=0, columnspan=3, padx=20, pady=10, sticky="ew")
 
+        # --- Controles de la Pestaña MIDI ---
+        self.midi_tab = self.tab_view.tab("Partitura (MIDI)")
+        self.midi_tab.grid_columnconfigure(1, weight=1)
+        midi_channels = [str(i) for i in range(1, 17)]
+
+        self.r_channel_label = ctk.CTkLabel(self.midi_tab, text="Canal MIDI para Rojo:")
+        self.r_channel_label.grid(row=0, column=0, padx=10, pady=10, sticky="w")
+        self.r_channel_menu = ctk.CTkOptionMenu(self.midi_tab, values=midi_channels)
+        self.r_channel_menu.set("1")
+        self.r_channel_menu.grid(row=0, column=1, padx=10, pady=10, sticky="ew")
+
+        self.g_channel_label = ctk.CTkLabel(self.midi_tab, text="Canal MIDI para Verde:")
+        self.g_channel_label.grid(row=1, column=0, padx=10, pady=10, sticky="w")
+        self.g_channel_menu = ctk.CTkOptionMenu(self.midi_tab, values=midi_channels)
+        self.g_channel_menu.set("2")
+        self.g_channel_menu.grid(row=1, column=1, padx=10, pady=10, sticky="ew")
+
+        self.b_channel_label = ctk.CTkLabel(self.midi_tab, text="Canal MIDI para Azul:")
+        self.b_channel_label.grid(row=2, column=0, padx=10, pady=10, sticky="w")
+        self.b_channel_menu = ctk.CTkOptionMenu(self.midi_tab, values=midi_channels)
+        self.b_channel_menu.set("3")
+        self.b_channel_menu.grid(row=2, column=1, padx=10, pady=10, sticky="ew")
+
+        # --- Botón Principal y Barra de Estado ---
+        self.generate_button = ctk.CTkButton(self, text="Generar Composición", height=40, command=self.start_generation_thread)
+        self.generate_button.grid(row=2, column=0, padx=20, pady=10, sticky="ew")
+        
         self.status_textbox = ctk.CTkTextbox(self, height=100, wrap="word")
-        self.status_textbox.grid(row=4, column=0, columnspan=3, padx=20, pady=(10, 20), sticky="nsew")
+        self.status_textbox.grid(row=3, column=0, padx=20, pady=(10, 20), sticky="nsew")
         self.update_status("Listo.", clear=True)
 
     def select_input_folder(self):
@@ -69,11 +103,17 @@ class App(ctk.CTk):
             self.input_folder_entry.delete(0, "end")
             self.input_folder_entry.insert(0, folder_path)
 
-    def select_output_file(self):
-        file_path = filedialog.asksaveasfilename(defaultextension=".wav", filetypes=[("WAV files", "*.wav")])
+    def select_output(self):
+        # La función del botón cambia según la pestaña activa
+        selected_tab = self.tab_view.get()
+        if selected_tab == "Audio (WAV)":
+            file_path = filedialog.asksaveasfilename(defaultextension=".wav", filetypes=[("WAV files", "*.wav")])
+        else: # MIDI
+            file_path = filedialog.askdirectory(title="Seleccionar carpeta para archivos MIDI")
+        
         if file_path:
-            self.output_file_entry.delete(0, "end")
-            self.output_file_entry.insert(0, file_path)
+            self.output_entry.delete(0, "end")
+            self.output_entry.insert(0, file_path)
 
     def update_status(self, text, clear=False):
         if clear: self.status_textbox.delete("1.0", "end")
@@ -88,31 +128,52 @@ class App(ctk.CTk):
 
     def run_pipeline(self):
         input_folder = self.input_folder_entry.get()
-        output_file = self.output_file_entry.get()
-        if not input_folder or not output_file:
-            self.after(0, self.update_status, "Error: Por favor, selecciona la carpeta de entrada y el archivo de salida.")
+        output_path = self.output_entry.get()
+        
+        if not input_folder or not output_path:
+            self.after(0, self.update_status, "Error: Por favor, selecciona la carpeta de entrada y la ruta de salida.")
             self.generate_button.configure(state="normal")
             return
-        command = [ sys.executable, "pipeline.py", "--input-folder", input_folder, "--output-file", output_file, "--duration", self.duration_entry.get(), "--scale", self.scale_menu.get(), "--mode", self.mode_menu.get(), "--waveform", self.waveform_menu.get() ]
         
+        # --- Construcción del Comando Dinámico ---
+        selected_tab = self.tab_view.get()
+        command = [sys.executable, "pipeline.py", "--input-folder", input_folder]
+
+        if selected_tab == "Audio (WAV)":
+            command.extend([
+                "--output-mode", "wav",
+                "--output-file", output_path,
+                "--duration", self.duration_entry.get(),
+                "--scale", self.scale_menu.get(),
+                "--mode", self.mode_menu.get(),
+                "--waveform", self.waveform_menu.get()
+            ])
+        else: # MIDI
+            # Para MIDI, el output-file es un placeholder, la carpeta real es output_path
+            midi_output_file_placeholder = str(Path(output_path) / "composition.mid")
+            command.extend([
+                "--output-mode", "midi",
+                "--output-file", midi_output_file_placeholder,
+                "--midi-r-channel", self.r_channel_menu.get(),
+                "--midi-g-channel", self.g_channel_menu.get(),
+                "--midi-b-channel", self.b_channel_menu.get()
+            ])
+
         process = subprocess.Popen(
-            command,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            # Usa la codificación preferida del sistema
-            encoding=locale.getpreferredencoding(),
-            errors='replace',
+            command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+            encoding=locale.getpreferredencoding(), errors='replace',
             creationflags=subprocess.CREATE_NO_WINDOW
         )
         
         for line in iter(process.stdout.readline, ''):
             self.after(0, self.update_status, line.strip())
         process.wait()
+        
         if process.returncode == 0:
-            self.after(0, self.update_status, f"\n¡Completado! Archivo guardado en {output_file}")
+            self.after(0, self.update_status, f"\n¡Completado! Revisa la carpeta de salida.")
         else:
-            self.after(0, self.update_status, f"\nError: El proceso falló con código {process.returncode}.")
+            self.after(0, self.update_status, f"\nError: El proceso falló.")
+        
         self.generate_button.configure(state="normal")
 
 if __name__ == "__main__":
