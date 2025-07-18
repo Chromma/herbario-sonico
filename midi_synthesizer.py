@@ -61,7 +61,7 @@ def create_midi_track(pixel_data, h, w, params):
             # Si hay un cambio brusco de brillo respecto al píxel anterior en el mismo canal
             if params['pitch_bend_map'] == 'brightness_change':
                 if last_brightness.get(channel) and abs(brightness - last_brightness[channel]) > 50:
-                    bend_amount = int(((brightness - last_brightness[channel]) / 255.0) * 4096) + 8192
+                    bend_amount = int(((brightness - last_brightness[channel]) / 255.0) * 4096)
                     track.append(mido.Message('pitchwheel', channel=channel, pitch=bend_amount, time=0))
             
             track.append(mido.Message('note_on', channel=channel, note=note_pitch, velocity=velocity, time=ticks_per_time_step if i == 0 else 0))

@@ -1,4 +1,4 @@
-# pipeline.py (Versión 3 - Soporte MIDI)
+# pipeline.py (Versión 4 - Parámetros MIDI Manuales)
 import argparse
 from pathlib import Path
 import multiprocessing
@@ -14,21 +14,25 @@ from composer import compose_audio
 
 
 # --- Workers para parelelización ---
-def wav_synthesis_worker(json_file: Path, wav_dir: Path, args):
+def wav_synthesis_worker(json_file, wav_dir, args):
     with open(json_file, 'r') as f: data = json.load(f)
-    output_filename = json_file.with_suffix(".wav").name
-    output_path = wav_dir / output_filename
+    output_path = wav_dir / json_file.with_suffix(".wav").name
     synthesize_wav(data, output_path, args.duration, args.scale, args.mode, args.waveform)
 
-def midi_synthesis_worker(json_file: Path, midi_dir: Path, args):
+def midi_synthesis_worker(json_file, midi_dir, args):
     with open(json_file, 'r') as f: data = json.load(f)
-    output_filename = json_file.with_suffix(".mid").name
-    output_path = midi_dir / output_filename
+    output_path = midi_dir / json_file.with_suffix(".mid").name
     # Recopilar parámetros MIDI de los argumentos
     midi_params = {
         'r_channel': args.midi_r_channel,
         'g_channel': args.midi_g_channel,
-        'b_channel': args.midi_b_channel
+        'b_channel': args.midi_b_channel,
+        
+        'velocity_map': args.midi_velocity_map,
+        'fixed_velocity': args.midi_fixed_velocity,
+        
+        'cc_map': args.midi_cc_map,
+        'pitch_bend_map': args.midi_pitch_bend_map
     }
     synthesize_midi(data, output_path, midi_params)
 
@@ -67,7 +71,7 @@ def run_full_pipeline(args):
         # --- PASO 3: COMPOSICIÓN (COMPOSER) ---
         print(f"--- PASO 3 de 3: Componiendo la pieza final de audio ---")
         compose_audio(wav_dir, output_file)
-
+        
     elif output_mode == 'midi':
         midi_dir = intermediate_dir / "2_midi_files"
         midi_dir.mkdir(parents=True, exist_ok=True)
@@ -75,7 +79,6 @@ def run_full_pipeline(args):
         for json_file in tqdm(json_files, desc="Sintetizando MIDI"):
             midi_synthesis_worker(json_file, midi_dir, args)
         print("Los archivos MIDI individuales han sido creados. La composición final no aplica para MIDI.")
-
 
     print(f"\nPipeline completado! Revisa la carpeta: {intermediate_dir}")
 
@@ -96,6 +99,10 @@ if __name__ == "__main__":
     parser.add_argument("--midi-r-channel", default=1)
     parser.add_argument("--midi-g-channel", default=2)
     parser.add_argument("--midi-b-channel", default=3)
+    parser.add_argument("--midi-velocity-map", default="brightness", choices=["brightness", "fixed"])
+    parser.add_argument("--midi-fixed-velocity", type=int, default=100)
+    parser.add_argument("--midi-cc-map", default="saturation", choices=["saturation", "brightness", "none"])
+    parser.add_argument("--midi-pitch-bend-map", default="brightness_change", choices=["brightness_change", "none"])
     
     args = parser.parse_args()
     run_full_pipeline(args)

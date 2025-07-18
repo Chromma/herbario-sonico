@@ -1,10 +1,11 @@
-# gui.py (Versión 6 - CPesta;as WAV y MIDI)
-import customtkinter as ctk
+# gui.py (Versión 76 - Controles MIDI manuales)
+import customtkinter as ctk, tkinter as tk
 from tkinter import filedialog
 import subprocess
 import threading
 import sys
-import locale 
+import locale
+from pathlib import Path
 
 class App(ctk.CTk):
     def __init__(self):
@@ -12,9 +13,10 @@ class App(ctk.CTk):
 
         # --- Configuración de la Ventana Principal ---
         self.title("Herbario Sónico")
-        self.geometry("500x650")
+        self.geometry("500x700")
         ctk.set_appearance_mode("dark")
         self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(3, weight=1)
 
         # --- Frame para selección de archivos ---
         self.file_frame = ctk.CTkFrame(self)
@@ -73,21 +75,39 @@ class App(ctk.CTk):
 
         self.r_channel_label = ctk.CTkLabel(self.midi_tab, text="Canal MIDI para Rojo:")
         self.r_channel_label.grid(row=0, column=0, padx=10, pady=10, sticky="w")
-        self.r_channel_menu = ctk.CTkOptionMenu(self.midi_tab, values=midi_channels)
-        self.r_channel_menu.set("1")
+        self.r_channel_menu = ctk.CTkOptionMenu(self.midi_tab, values=midi_channels); self.r_channel_menu.set("1")
         self.r_channel_menu.grid(row=0, column=1, padx=10, pady=10, sticky="ew")
 
         self.g_channel_label = ctk.CTkLabel(self.midi_tab, text="Canal MIDI para Verde:")
         self.g_channel_label.grid(row=1, column=0, padx=10, pady=10, sticky="w")
-        self.g_channel_menu = ctk.CTkOptionMenu(self.midi_tab, values=midi_channels)
-        self.g_channel_menu.set("2")
+        self.g_channel_menu = ctk.CTkOptionMenu(self.midi_tab, values=midi_channels); self.g_channel_menu.set("2")        
         self.g_channel_menu.grid(row=1, column=1, padx=10, pady=10, sticky="ew")
 
         self.b_channel_label = ctk.CTkLabel(self.midi_tab, text="Canal MIDI para Azul:")
         self.b_channel_label.grid(row=2, column=0, padx=10, pady=10, sticky="w")
-        self.b_channel_menu = ctk.CTkOptionMenu(self.midi_tab, values=midi_channels)
-        self.b_channel_menu.set("3")
+        self.b_channel_menu = ctk.CTkOptionMenu(self.midi_tab, values=midi_channels); self.b_channel_menu.set("3")        
         self.b_channel_menu.grid(row=2, column=1, padx=10, pady=10, sticky="ew")
+
+        # Mapeo de Velocidad
+        self.velocity_label = ctk.CTkLabel(self.midi_tab, text="Velocity (Fuerza):")
+        self.velocity_label.grid(row=3, column=0, padx=10, pady=5, sticky="w")
+        self.velocity_menu = ctk.CTkOptionMenu(self.midi_tab, values=["brightness", "fixed"])
+        self.velocity_menu.grid(row=3, column=1, padx=10, pady=5, sticky="ew")
+        
+        self.fixed_velocity_entry = ctk.CTkEntry(self.midi_tab, placeholder_text="Valor (0-127)"); self.fixed_velocity_entry.insert(0, "100")
+        self.fixed_velocity_entry.grid(row=4, column=1, padx=10, pady=5, sticky="ew")
+        
+        # Mapeo de Control Change
+        self.cc_label = ctk.CTkLabel(self.midi_tab, text="CC#1 (Mod Wheel):")
+        self.cc_label.grid(row=5, column=0, padx=10, pady=5, sticky="w")
+        self.cc_menu = ctk.CTkOptionMenu(self.midi_tab, values=["saturation", "brightness", "none"])
+        self.cc_menu.grid(row=5, column=1, padx=10, pady=5, sticky="ew")
+
+        # Mapeo de Pitch Bend
+        self.pitch_bend_label = ctk.CTkLabel(self.midi_tab, text="Pitch Bend:")
+        self.pitch_bend_label.grid(row=6, column=0, padx=10, pady=5, sticky="w")
+        self.pitch_bend_menu = ctk.CTkOptionMenu(self.midi_tab, values=["brightness_change", "none"])
+        self.pitch_bend_menu.grid(row=6, column=1, padx=10, pady=5, sticky="ew")
 
         # --- Botón Principal y Barra de Estado ---
         self.generate_button = ctk.CTkButton(self, text="Generar Composición", height=40, command=self.start_generation_thread)
@@ -97,6 +117,7 @@ class App(ctk.CTk):
         self.status_textbox.grid(row=3, column=0, padx=20, pady=(10, 20), sticky="nsew")
         self.update_status("Listo.", clear=True)
 
+    # --- Funciones de la Interfaz (actualizadas) ---
     def select_input_folder(self):
         folder_path = filedialog.askdirectory()
         if folder_path:
@@ -123,8 +144,7 @@ class App(ctk.CTk):
     def start_generation_thread(self):
         self.generate_button.configure(state="disabled")
         self.update_status("Iniciando proceso...", clear=True)
-        thread = threading.Thread(target=self.run_pipeline)
-        thread.start()
+        threading.Thread(target=self.run_pipeline).start()
 
     def run_pipeline(self):
         input_folder = self.input_folder_entry.get()
@@ -150,14 +170,17 @@ class App(ctk.CTk):
             ])
         else: # MIDI
             # Para MIDI, el output-file es un placeholder, la carpeta real es output_path
-            midi_output_file_placeholder = str(Path(output_path) / "composition.mid")
             command.extend([
                 "--output-mode", "midi",
-                "--output-file", midi_output_file_placeholder,
+                "--output-file", str(Path(output_path) / "placeholder.mid"),
                 "--midi-r-channel", self.r_channel_menu.get(),
                 "--midi-g-channel", self.g_channel_menu.get(),
-                "--midi-b-channel", self.b_channel_menu.get()
-            ])
+                "--midi-b-channel", self.b_channel_menu.get(),
+                "--midi-velocity-map", self.velocity_menu.get(),
+                "--midi-fixed-velocity", self.fixed_velocity_entry.get(),
+                "--midi-cc-map", self.cc_menu.get(),
+                "--midi-pitch-bend-map", self.pitch_bend_menu.get()
+                ])
 
         process = subprocess.Popen(
             command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
