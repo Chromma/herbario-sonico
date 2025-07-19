@@ -3,7 +3,6 @@ import customtkinter as ctk
 from tkinter import filedialog
 import threading
 import sys
-import locale
 import multiprocessing
 from pathlib import Path
 from types import SimpleNamespace
@@ -18,7 +17,7 @@ class App(ctk.CTk):
         self.geometry("500x700")
         ctk.set_appearance_mode("dark")
         self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(4, weight=1)
+        self.grid_rowconfigure(3, weight=1)
 
         # --- Frame para selección de archivos ---
         self.file_frame = ctk.CTkFrame(self)
@@ -142,18 +141,23 @@ class App(ctk.CTk):
             self.output_entry.insert(0, file_path)
 
     def update_status(self, text, clear=False):
-        if clear:
-            self.status_textbox.delete("1.0", "end")
-            self.status_textbox.insert("end", text + "\n")
-            self.status_textbox.see("end")
-
-    def update_progress(self, text): # Función específica para actualizar la barra de progreso.
-            self.progress_label.configure(text=str(text))
+        if clear: self.status_textbox.delete("1.0", "end")
+        # Si el texto es de progreso, reemplaza la última línea
+        current_text = self.status_textbox.get("1.0", "end-1c")
+        if str(text).startswith("Sintetizando archivo"):
+            lines = current_text.split('\n')
+            if lines and lines[-1].startswith("Sintetizando archivo"):
+                self.status_textbox.delete(f"{len(lines)}.0", "end")
+                self.status_textbox.insert("end", str(text))
+            else:
+                self.status_textbox.insert("end", "\n" + str(text))
+        else:
+            self.status_textbox.insert("end", "\n" + str(text))
+        self.status_textbox.see("end")
 
     def start_generation_thread(self):
         self.generate_button.configure(state="disabled")
         self.update_status("Iniciando proceso...", clear=True)
-        self.update_progress("") # Limpiar la barra de progreso anterior
         threading.Thread(target=self.run_pipeline_direct).start()
 
     def run_pipeline_direct(self):
@@ -183,12 +187,10 @@ class App(ctk.CTk):
                 args.midi_cc_map = self.cc_menu.get()
                 args.midi_pitch_bend_map = self.pitch_bend_menu.get()
 
-            run_full_pipeline( # Llamar a la función directamente, pasando el método de la GUI como callback
-                            args,
-                            status_callback=lambda text: self.after(0, self.update_status, text),
-                            progress_callback=lambda text: self.after(0, self.update_progress, text))
+            run_full_pipeline(args, status_callback=lambda text: self.after(0, self.update_status, text))
         except Exception as e:
             self.after(0, self.update_status, f"Error inesperado: {e}")
+        
         self.generate_button.configure(state="normal")
 
 if __name__ == "__main__":
