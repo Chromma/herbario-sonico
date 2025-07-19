@@ -14,7 +14,7 @@ class App(ctk.CTk):
 
         # --- Configuración de la Ventana Principal ---
         self.title("Herbario Sónico")
-        self.geometry("500x700")
+        self.geometry("500x1000")
         ctk.set_appearance_mode("dark")
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(3, weight=1)
@@ -169,7 +169,12 @@ class App(ctk.CTk):
             if not args.input_folder or not output_path_str:
                 self.after(0, self.update_status, "Error: Por favor, selecciona la carpeta de entrada y la ruta de salida.")
                 self.generate_button.configure(state="normal"); return
-            args.output_mode = self.tab_view.get().lower().split()[0]
+            
+            selected_tab = self.tab_view.get()
+            if selected_tab == "Audio (WAV)":
+                args.output_mode = 'wav'
+            else: # "Partitura (MIDI)"
+                args.output_mode = 'midi'
             
             if args.output_mode == 'wav':
                 args.output_file = output_path_str
