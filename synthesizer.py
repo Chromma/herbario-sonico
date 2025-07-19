@@ -1,4 +1,4 @@
-# synthesizer.py (Versión 5 - Procesamiento por Carpetas)
+# synthesizer.py (Versión 7 - Secuencial y optimización Numba)
 # --- Quick Index ---
 # Posible variable para revisión. Más control */*
 import argparse
@@ -8,8 +8,6 @@ from pathlib import Path
 from scipy.io.wavfile import write
 from scipy import signal
 from tqdm import tqdm
-import multiprocessing
-from functools import partial
 from numba import jit
 
 # --- Paletas de Frecuencias (Escalas Musicales) ---
@@ -17,14 +15,14 @@ from numba import jit
 BASE_FREQ = 220
 SCALES = { "pentatonic": [0, 2, 4, 7, 9], "major": [0, 2, 4, 5, 7, 9, 11], "minor": [0, 2, 3, 5, 7, 8, 10] }
 
-@jit(nopython=True)
+@jit(nopython=True, cache=True)
 def get_note_freq_numba(note_index, scale_array, num_notes, base_freq):
     octave = note_index // num_notes
     note_in_scale = scale_array[note_index % num_notes]
     semitones = 12 * octave + note_in_scale
     return base_freq * (2**(semitones / 12.0))
 
-@jit(nopython=True)
+@jit(nopython=True, cache=True)
 def _numba_synthesis_loop(pixel_data, h, w, total_samples, scale_array, mode_is_rgb, waveform_is_sq, waveform_is_saw, scale_is_raw, sample_rate, duration_per_pixel):
     """Bucle principal de síntesis, compilado por Numba."""
     audio_buffer = np.zeros((total_samples, 2), dtype=np.float32)
@@ -81,54 +79,34 @@ def _numba_synthesis_loop(pixel_data, h, w, total_samples, scale_array, mode_is_
                 audio_buffer[start_sample + i, 1] += wave_to_add[i] * pan
     return audio_buffer
 
-def synthesize(data_path: Path, output_path: Path, duration_s: float, scale: str, mode: str, waveform: str):
-    with open(data_path, 'r') as f:
-        data = json.load(f)
-
+def synthesize(data, output_path: Path, duration_s: float, scale: str, mode: str, waveform: str):
     h, w = data["image_height"], data["image_width"]
-    
-    # Preparar datos para Numba
     pixel_data_for_numba = []
     for item in data["data"]:
         pixels = [(p["y"], p["brightness"], p["rgb"][0], p["rgb"][1], p["rgb"][2]) for p in item["pixels"]]
         pixel_data_for_numba.append((item["time_step"], pixels))
-
-    # Pasar booleanos y arrays simples a Numba es más eficiente
     scale_array = np.array(SCALES.get(scale, []), dtype=np.int32)
-    audio_buffer = _numba_synthesis_loop(
-        pixel_data_for_numba, h, w, int(duration_s * 44100), 
-        scale_array, mode == 'rgb_instrument', waveform == 'square', 
-        waveform == 'sawtooth', scale == 'raw', 44100, 0.5
-    )
-
-    print("Normalizando y guardando el archivo .wav...")
+    audio_buffer = _numba_synthesis_loop(pixel_data_for_numba, h, w, int(duration_s * 44100), scale_array, mode == 'rgb_instrument', waveform == 'square', waveform == 'sawtooth', scale == 'raw', 44100, 0.5)
+    # La impresión ahora solo ocurre si se llama directamente
+    # print("Normalizando y guardando el archivo .wav...")
     max_val = np.max(np.abs(audio_buffer))
     if max_val > 0: audio_buffer /= max_val
     output_path.parent.mkdir(parents=True, exist_ok=True)
     write(output_path, 44100, (audio_buffer * 32767).astype(np.int16))
-    
-# --- Función para paralelizar ---
-def process_single_file(json_file: Path, args):
-    "Función que envuelve la lógica para procesar un único archivo."
-    try:
-        output_dir = Path(args.output)
-        output_filename = json_file.with_suffix(".wav").name
-        output_path = output_dir / output_filename
-        synthesize(json_file, output_path, args.duration, args.scale, args.mode, args.waveform)
-    except Exception as e:
-        print(f"Error procesando {json_file.name}: {e}")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Sintetiza audio desde archivos .json, individualmente o por carpetas en paralelo.")
-    parser.add_argument("--input", type=str, required=True)
-    parser.add_argument("--output", type=str, required=True)
+    parser = argparse.ArgumentParser(description="Sintetiza audio desde archivos .json.")
+    parser.add_argument("--input", type=str, required=True, help="Ruta al archivo .json o carpeta de archivos .json.")
+    parser.add_argument("--output", type=str, required=True, help="Ruta a la carpeta de salida para los archivos .wav.")
     parser.add_argument("--duration", type=float, default=15.0)
     parser.add_argument("--scale", type=str, default="pentatonic", choices=["raw", "pentatonic", "major", "minor"])
     parser.add_argument("--mode", type=str, default="rgb_instrument", choices=["brightness", "rgb_instrument"])
     parser.add_argument("--waveform", type=str, default="sine", choices=["sine", "square", "sawtooth"])
     args = parser.parse_args()
-    
+
     input_path = Path(args.input)
+    output_dir = Path(args.output)
+    
     files_to_process = []
     if input_path.is_dir():
         files_to_process.extend(sorted(input_path.glob('*.json')))
@@ -138,16 +116,14 @@ if __name__ == "__main__":
     if not files_to_process:
         print(f"No se encontraron archivos .json en '{input_path}'.")
     else:
-        print(f"Se encontraron {len(files_to_process)} archivo(s). Iniciando síntesis en paralelo")
-        
-        # --- Lógica de Paralelización ---
-        # Crea un "pool" de procesos trabajadores, uno por cada núcleo de CPU disponible.
-        with multiprocessing.Pool() as pool:
-            # Crea una función parcial que ya tiene todos los argumentos, excepto el nombre del archivo
-            task = partial(process_single_file, args=args)
-            # pool.imap(...) distribuye la lista de archivos entre los procesos.
-            # tqdm(...) envuelve esto para mostrar una única barra de progreso.
-            for _ in tqdm(pool.imap_unordered(task, files_to_process), total=len(files_to_process), desc="Sintetizando en paralelo"):
-                pass
-        
-        print("Proceso de síntesis en paralelo completado")
+        output_dir.mkdir(parents=True, exist_ok=True)
+        print(f"Se encontraron {len(files_to_process)} archivo(s). Iniciando síntesis secuencial...")
+        for json_file in tqdm(files_to_process, desc="Sintetizando"):
+            try:
+                with open(json_file, 'r') as f:
+                    data = json.load(f)
+                output_path = output_dir / json_file.with_suffix(".wav").name
+                synthesize(data, output_path, args.duration, args.scale, args.mode, args.waveform)
+            except Exception as e:
+                print(f"Error procesando {json_file.name}: {e}")
+        print("Proceso de síntesis completado.")

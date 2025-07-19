@@ -10,9 +10,8 @@ from tqdm import tqdm
 import numpy as np
 from numba import jit
 
-@jit(nopython=True)
-def _numba_scan(image_array_gray, image_array_rgb, width, height, brightness_threshold):
-    """Esta función es compilada por Numba para máxima velocidad."""
+@jit(nopython=True, cache=True)
+def _numba_scan(image_array_gray, image_array_rgb, width, height, brightness_threshold): # Esta función es compilada por Numba para máxima velocidad
     pixel_data = []
     for x in range(width):
         # Usamos una tupla para la columna porque Numba no soporta listas de diccionarios

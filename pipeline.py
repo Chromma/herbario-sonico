@@ -1,10 +1,8 @@
-# pipeline.py (Versión 4 - Parámetros MIDI Manuales)
+# pipeline.py (Versión 5 - Callback para GUI)
 import argparse
-from pathlib import Path
-import multiprocessing
-from functools import partial
-from tqdm import tqdm
 import json
+from pathlib import Path
+from tqdm import tqdm
 
 # Importa las funciones principales de nuestros otros scripts
 from scanner import analyze_image
@@ -12,31 +10,16 @@ from synthesizer import synthesize as synthesize_wav # Mayor claridad
 from midi_synthesizer import synthesize_midi
 from composer import compose_audio
 
+# Clase auxiliar para redirigir la salida de tqdm
+class TqdmRedirect:
+    def __init__(self, callback):
+        self.callback = callback
+    def write(self, text):
+        self.callback(text.strip())
+    def flush(self):
+        pass
 
-# --- Workers para parelelización ---
-def wav_synthesis_worker(json_file, wav_dir, args):
-    with open(json_file, 'r') as f: data = json.load(f)
-    output_path = wav_dir / json_file.with_suffix(".wav").name
-    synthesize_wav(data, output_path, args.duration, args.scale, args.mode, args.waveform)
-
-def midi_synthesis_worker(json_file, midi_dir, args):
-    with open(json_file, 'r') as f: data = json.load(f)
-    output_path = midi_dir / json_file.with_suffix(".mid").name
-    # Recopilar parámetros MIDI de los argumentos
-    midi_params = {
-        'r_channel': args.midi_r_channel,
-        'g_channel': args.midi_g_channel,
-        'b_channel': args.midi_b_channel,
-        
-        'velocity_map': args.midi_velocity_map,
-        'fixed_velocity': args.midi_fixed_velocity,
-        
-        'cc_map': args.midi_cc_map,
-        'pitch_bend_map': args.midi_pitch_bend_map
-    }
-    synthesize_midi(data, output_path, midi_params)
-
-def run_full_pipeline(args):
+def run_full_pipeline(args, status_callback=print, progress_callback=print):
     # Ejecuta el flujo completo y guarda los archivos intermedios en carpetas permanentes.
     input_folder = Path(args.input_folder)
     output_file = Path(args.output_file)
@@ -47,40 +30,54 @@ def run_full_pipeline(args):
     json_dir = intermediate_dir / "1_json_data"
     json_dir.mkdir(parents=True, exist_ok=True)
     
-    print(f"Archivos intermedios se guardarán en: {intermediate_dir}")
+    status_callback(f"Archivos intermedios se guardarán en: {intermediate_dir}")
+    
+    image_files = sorted(input_folder.glob('*.*'))
+    if not image_files:
+        status_callback(f"Error: No se encontraron imágenes en '{input_folder}'.")
+        return
+    
+    progress_bar_stream = TqdmRedirect(progress_callback)
     
     # --- PASO 1: ANÁLISIS (SCANNER) ---
-    image_files = sorted(input_folder.glob('*.*'))
-    print(f"--- PASO 1 de 3: Analizando {len(image_files)} imagenes ---")
-    for image_file in tqdm(image_files, desc="Analizando"):
-        output_path = json_dir / image_file.with_suffix(".json").name
-        analyze_image(image_file, output_path)
+    status_callback(f"--- PASO 1 de 3: Analizando {len(image_files)} imagenes ---")
+    for image_file in tqdm(image_files, desc="Analizando", file=progress_bar_stream):
+        analyze_image(image_file, json_dir / image_file.with_suffix(".json").name)
 
     # --- PASO 2: SÍNTESIS (WAV o MIDI) ---
     json_files = sorted(json_dir.glob('*.json'))
-    print(f"--- PASO 2 de 3: Sintetizando {len(json_files)} archivos en modo {output_mode} ---")
-
+    status_callback(f"--- PASO 2 de 3: Sintetizando {len(json_files)} archivos en modo {output_mode} ---")
+    
     if output_mode == 'wav':
         wav_dir = intermediate_dir / "2_wav_individual_sounds"
         wav_dir.mkdir(parents=True, exist_ok=True)
-        with multiprocessing.Pool() as pool:
-            task = partial(wav_synthesis_worker, wav_dir=wav_dir, args=args)
-            for _ in tqdm(pool.imap_unordered(task, json_files), total=len(json_files), desc="Sintetizando WAV"):
-                pass
+        # Bucle secuencial
+        for json_file in tqdm(json_files, desc="Sintetizando WAV", file=progress_bar_stream):
+            with open(json_file, 'r') as f: data = json.load(f)
+            output_path = wav_dir / json_file.with_suffix(".wav").name
+            synthesize_wav(data, output_path, args.duration, args.scale, args.mode, args.waveform)
         
         # --- PASO 3: COMPOSICIÓN (COMPOSER) ---
-        print(f"--- PASO 3 de 3: Componiendo la pieza final de audio ---")
+        status_callback(f"--- PASO 3 de 3: Componiendo la pieza final de audio ---")
         compose_audio(wav_dir, output_file)
         
     elif output_mode == 'midi':
         midi_dir = intermediate_dir / "2_midi_files"
         midi_dir.mkdir(parents=True, exist_ok=True)
-        # La síntesis MIDI es muy rápida, no siempre necesita paralelización
-        for json_file in tqdm(json_files, desc="Sintetizando MIDI"):
-            midi_synthesis_worker(json_file, midi_dir, args)
-        print("Los archivos MIDI individuales han sido creados. La composición final no aplica para MIDI.")
-
-    print(f"\nPipeline completado! Revisa la carpeta: {intermediate_dir}")
+        
+    for json_file in tqdm(json_files, desc="Sintetizando MIDI", file=progress_bar_stream):
+        with open(json_file, 'r') as f: data = json.load(f)
+        output_path = midi_dir / json_file.with_suffix(".mid").name
+        midi_params = {
+            'r_channel': args.midi_r_channel, 'g_channel': args.midi_g_channel, 'b_channel': args.midi_b_channel,
+            'velocity_map': args.midi_velocity_map, 'fixed_velocity': args.midi_fixed_velocity,
+            'cc_map': args.midi_cc_map,
+            'pitch_bend_map': args.midi_pitch_bend_map
+        }
+        synthesize_midi(data, output_path, midi_params)
+    status_callback("Los archivos MIDI individuales han sido creados.")
+    
+    status_callback(f"\nPipeline completado! Revisa la carpeta de salida.")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Pipeline completo para sonificación de imágenes.")
