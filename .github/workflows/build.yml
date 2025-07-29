@@ -1,0 +1,57 @@
+name: Build Application
+
+on:
+  release:
+    types: [ created ]
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install Poetry
+        run: pip install poetry
+
+      - name: Install dependencies
+        run: python -m poetry install --no-root
+
+      - name: Build with PyInstaller
+        run: python -m poetry run pyinstaller --onefile --windowed --name HerbarioSonico gui.py
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: HerbarioSonico-Windows
+          path: dist/HerbarioSonico.exe
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install Poetry
+        run: pip install poetry
+
+      - name: Install dependencies
+        run: python -m poetry install --no-root
+        
+      - name: Build with PyInstaller
+        run: |
+          python -m poetry run pyinstaller --onefile --windowed --name HerbarioSonico gui.py
+          cd dist
+          zip -r HerbarioSonico-macOS.zip HerbarioSonico.app
+          
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: HerbarioSonico-macOS
+          path: dist/HerbarioSonico-macOS.zip
